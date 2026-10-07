@@ -7,6 +7,15 @@ The authoritative raw evidence and data products are pushed to Hugging Face:
 - `metadata/sites.csv`: 16 checked logic site IDs with mapping links.
 - `metadata/schema.json`, `manifest.json`, `coverage.json`.
 - `data/weather_reanalysis/`, `data/marine_reanalysis/`: Historical atmosphere and marine features.
+- `data/weather_recent/`, `data/marine_recent/`: Recent data models.
+- `data/weather_forecasts/`, `data/marine_forecasts/`: Immutable forecast snapshots.
+
+## Features
+- **Idempotent Data Collection**: Retrieves 14-day windows with atomic local storage.
+- **Hugging Face Integration**: Synchronizes local state by downloading remote shards before appending to prevent data loss. Uploads automatically.
+- **Strict Validation**: Validates continuity, prefixes, and physical bounds. Trims unavailable trailing tails as pending.
+- **Budget Control**: Adheres to strict per-minute/hour/day/month Open-Meteo limits.
+- **Strict Site Verification**: Harbour coordinates validated deeply against Wikipedia URLs and valid spatial ranges.
 
 ## Available Commands
 Run using the virtual environment python:
