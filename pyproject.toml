@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sl_fisheries_weather"
+version = "0.1.0"
+description = "Sri Lankan fishing-harbour weather and marine dataset"
+authors = [
+    {name = "Tharindu Perera"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "pandas",
+    "pyarrow",
+    "duckdb",
+    "huggingface_hub",
+    "python-dotenv",
+    "tzdata"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "responses"
+]
+
+[project.scripts]
+sl_fisheries_weather = "sl_fisheries_weather.cli:main"

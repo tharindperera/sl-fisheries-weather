@@ -1,0 +1,17 @@
+site_id,name,site_kind,admin_district,fisheries_district,coastal_sector,lat_land,lon_land,lat_sea,lon_sea,coordinate_source_url,checked_date,verification_status,registry_version
+dikkowita,Dikkowita Harbour,harbour,Gampaha,Gampaha,West,7.0052,79.8661,6.98,79.82,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+beruwala,Beruwala Fishery Harbour,harbour,Kalutara,Kalutara,West,6.4747,79.9789,6.45,79.93,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+negombo,Negombo harbour,harbour,Gampaha,Negombo,West,7.1467,79.8333,7.12,79.79,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+tangalle,Tangalle Fishery Harbour,harbour,Hambantota,Tangalle,South,6.0240,80.7911,5.98,80.82,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+mirissa,Mirissa Fishery Harbour,harbour,Matara,Matara,South,5.9458,80.4597,5.91,80.46,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+nilwella,Nilwella Fishery Harbour,harbour,Matara,Matara,South,5.9622,80.6417,5.93,80.64,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+kudawella,Kudawella Fishery Harbour,harbour,Hambantota,Tangalle,South,5.9774,80.7338,5.94,80.73,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+puranawella,Puranawella Harbour,harbour,Matara,Matara,South,5.9667,80.6500,5.93,80.65,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+puttalam,Puttalam lagoon,coastal_area,Puttalam,Puttalam,North West,8.0167,79.7167,8.03,79.67,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+chilaw,Chilaw Fishery Harbour,harbour,Puttalam,Chilaw,North West,7.5833,79.8000,7.56,79.76,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+kalpitiya,Kalpitiya Fishery Harbour,harbour,Puttalam,Puttalam,North West,8.2372,79.7628,8.25,79.72,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+ambalangoda,Ambalangoda Fishery Harbour,harbour,Galle,Galle,South West,6.2350,80.0509,6.21,80.01,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+galle,Galle Fishery Harbour,harbour,Galle,Galle,South,6.0356,80.2150,6.00,80.21,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+trincomalee,Cod Bay Harbour,harbour,Trincomalee,Trincomalee,East,8.5669,81.2311,8.58,81.27,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+valaichchenai,Valaichchenai Fishery Harbour,harbour,Batticaloa,Batticaloa,East,7.9270,81.5298,7.95,81.57,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
+myliddy,Myliddy Fishery Harbour,harbour,Jaffna,Jaffna,North,9.8000,80.0500,9.84,80.05,https://www.fisheries.gov.lk,2026-10-07,verified,1.0
