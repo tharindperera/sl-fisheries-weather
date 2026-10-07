@@ -1,13 +1,12 @@
 # sl-fisheries-weather
 
-A daily Sri Lankan fishing-harbour weather and marine dataset from 2010-01-01 onward, with Hugging Face storage, resumable collection, GitHub Actions historical backfill and continuing daily updates.
+A daily Sri Lankan fishing-harbour weather and marine dataset from 2010-01-01 onward. The dataset is automatically fetched and updated via GitHub Actions and published directly to Hugging Face.
 
-## Project Structure
-- `sl_fisheries_weather/`: Python package for fetching, validating, and publishing data.
-- `catalogue/`: Contains the official registry of 16 verified sites.
-- `data/`: Local storage for checkpoints, raw downloads, and parquet staged data.
-- `tests/`: Offline tests.
-- `.github/workflows/`: Automated GitHub Actions for CI, backfill, daily updates, and monthly reconciliation.
+## Dataset Structure
+The authoritative raw evidence and data products are pushed to Hugging Face:
+- `metadata/sites.csv`: 16 checked logic site IDs with mapping links.
+- `metadata/schema.json`, `manifest.json`, `coverage.json`.
+- `data/weather_reanalysis/`, `data/marine_reanalysis/`: Historical atmosphere and marine features.
 
 ## Available Commands
 Run using the virtual environment python:
@@ -17,19 +16,16 @@ Commands:
 - `doctor`: Checks dependencies and environment.
 - `verify-sites`: Validates the site registry.
 - `pilot`: Fetches a small batch into `data/pilot` for testing.
-- `init-hf`: Initializes the Hugging Face repository metadata.
-- `backfill`: Runs historical data collection.
+- `init-hf`: Initializes the Hugging Face repository metadata safely.
+- `backfill`: Runs historical data collection for specified windows.
 - `update`: Refreshes recent data and repairs eligible gaps.
-- `publish`: Uploads staged files to Hugging Face.
+- `publish`: Publishes staged files to HF.
 - `validate`: Checks the validity of published datasets.
-- `status`: Reports coverage and pending jobs.
+- `status`: Reports pending jobs and budgets.
 - `reconcile`: Revisits older recent reanalysis data.
 
 ## Automated Scheduling
-GitHub schedules run daily and hourly depending on enabled flags. See `docs/SETUP.md` for more information on configuring scheduled runs and secrets.
-
-## Reconciliation
-The `reconcile` command looks back ~90 days and repairs older recent data. Scheduled to run monthly on the 1st day of the month via Actions.
+GitHub schedules run daily and hourly depending on enabled flags. See `docs/SETUP.md`.
 
 ## License
 Code: MIT License

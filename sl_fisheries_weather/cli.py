@@ -25,7 +25,7 @@ def cmd_verify_sites(args):
 def cmd_pilot(args):
     import json
     from pathlib import Path
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from sl_fisheries_weather.config import (
         DATA_DIR, ATMOSPHERE_DAILY, MARINE_DAILY, TIMEZONE,
         OPENMETEO_ARCHIVE_URL, OPENMETEO_MARINE_ARCHIVE_URL,
@@ -66,7 +66,7 @@ def cmd_pilot(args):
             "precipitation_unit": "mm"
         }
         print("Fetching historical atmosphere...")
-        res_atmos = worker.fetch_batch(f"pilot_atmos_{i}", OPENMETEO_ARCHIVE_URL, params_atmos, len(batch), expected_days)
+        res_atmos = worker.fetch_batch(f"pilot_atmos_{i}", OPENMETEO_ARCHIVE_URL, params_atmos, len(batch), expected_days, args.start, ATMOSPHERE_DAILY)
         with open(pilot_dir / f"pilot_atmos_{i}.json", "w") as f:
             json.dump(res_atmos, f)
 
@@ -82,7 +82,7 @@ def cmd_pilot(args):
             "cell_selection": "sea"
         }
         print("Fetching historical marine...")
-        res_marine = worker.fetch_batch(f"pilot_marine_{i}", OPENMETEO_MARINE_ARCHIVE_URL, params_marine, len(batch), expected_days)
+        res_marine = worker.fetch_batch(f"pilot_marine_{i}", OPENMETEO_MARINE_ARCHIVE_URL, params_marine, len(batch), expected_days, args.start, MARINE_DAILY)
         with open(pilot_dir / f"pilot_marine_{i}.json", "w") as f:
             json.dump(res_marine, f)
             
@@ -103,7 +103,8 @@ def cmd_pilot(args):
                 "wind_speed_unit": "ms",
                 "precipitation_unit": "mm"
             }
-            res_rec_atmos = worker.fetch_batch(f"pilot_recent_atmos_{i}", OPENMETEO_FORECAST_URL, params_recent_atmos, len(batch), 14)
+            past_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            res_rec_atmos = worker.fetch_batch(f"pilot_recent_atmos_{i}", OPENMETEO_FORECAST_URL, params_recent_atmos, len(batch), 14, past_date, ATMOSPHERE_DAILY)
             with open(pilot_dir / f"pilot_recent_atmos_{i}.json", "w") as f:
                 json.dump(res_rec_atmos, f)
                 
@@ -116,7 +117,7 @@ def cmd_pilot(args):
                 "past_days": 7,
                 "forecast_days": 7
             }
-            res_rec_marine = worker.fetch_batch(f"pilot_recent_marine_{i}", OPENMETEO_MARINE_FORECAST_URL, params_recent_marine, len(batch), 14)
+            res_rec_marine = worker.fetch_batch(f"pilot_recent_marine_{i}", OPENMETEO_MARINE_FORECAST_URL, params_recent_marine, len(batch), 14, past_date, MARINE_DAILY)
             with open(pilot_dir / f"pilot_recent_marine_{i}.json", "w") as f:
                 json.dump(res_rec_marine, f)
             
@@ -135,24 +136,95 @@ def cmd_init_hf(args):
     pub.init_hf(create=args.create)
 
 def cmd_backfill(args):
+    import os
+    from dotenv import load_dotenv
+    from datetime import datetime
+    from sl_fisheries_weather.budget.ledger import Ledger
+    from sl_fisheries_weather.backfill.worker import Worker
+    from sl_fisheries_weather.backfill.runner import Runner
+    from sl_fisheries_weather.manifest.state import CheckpointManager
+    from sl_fisheries_weather.config import DATA_DIR
+    
     print(f"Running backfill from {args.start} with limit {args.max_runtime_minutes} mins, {args.max_estimated_calls} calls...")
+    load_dotenv()
+    repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
+    
+    sites = load_registry()
+    ledger = Ledger({
+        "minute": 100, "hour": 1000, "day": 5000, "month": 150000
+    })
+    worker = Worker(ledger, DATA_DIR)
+    checkpoint = CheckpointManager()
+    
+    runner = Runner(worker, checkpoint, repo_id)
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    runner.backfill(sites, args.start, end_date, args.max_runtime_minutes, args.max_estimated_calls)
+    print("Backfill completed or paused cleanly.")
+
+def _get_runner_setup():
+    import os
+    from dotenv import load_dotenv
+    from sl_fisheries_weather.budget.ledger import Ledger
+    from sl_fisheries_weather.backfill.worker import Worker
+    from sl_fisheries_weather.backfill.runner import Runner
+    from sl_fisheries_weather.manifest.state import CheckpointManager
+    from sl_fisheries_weather.config import DATA_DIR
+    
+    load_dotenv()
+    repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
+    sites = load_registry()
+    ledger = Ledger({"minute": 100, "hour": 1000, "day": 5000, "month": 150000})
+    worker = Worker(ledger, DATA_DIR)
+    checkpoint = CheckpointManager()
+    
+    return Runner(worker, checkpoint, repo_id), sites
 
 def cmd_update(args):
+    from datetime import datetime, timedelta
     print(f"Running update with limit {args.max_runtime_minutes} mins...")
+    runner, sites = _get_runner_setup()
+    end_date = datetime.now()
+    start_date = (end_date - timedelta(days=14)).strftime("%Y-%m-%d")
+    runner.backfill(sites, start_date, end_date.strftime("%Y-%m-%d"), args.max_runtime_minutes, 1000000)
+    print("Update completed.")
 
 def cmd_publish(args):
     print("Publishing to Hugging Face...")
+    runner, _ = _get_runner_setup()
+    # Staged data would be published here
+    print("Staged files already published during backfill/update.")
 
 def cmd_validate(args):
     print("Validating datasets...")
-    if args.all:
-        print("Validating all products...")
+    from sl_fisheries_weather.config import DATA_DIR
+    from pathlib import Path
+    import pandas as pd
+    data_dir = Path(DATA_DIR)
+    for p in data_dir.rglob("*.parquet"):
+        try:
+            df = pd.read_parquet(p)
+            print(f"{p}: {len(df)} rows OK")
+        except Exception as e:
+            print(f"Error validating {p}: {e}")
+            raise e
+    print("Validation passed.")
 
 def cmd_status(args):
     print("Checking dataset status...")
+    runner, _ = _get_runner_setup()
+    print(f"Ledger Minute: {runner.worker.ledger._get_sum('minute_calls')}")
+    print(f"Ledger Hour: {runner.worker.ledger._get_sum('hour_calls')}")
+    print(f"Ledger Day: {runner.worker.ledger._get_sum('day_calls')}")
+    print(f"Ledger Month: {runner.worker.ledger._get_sum('month_calls')}")
 
 def cmd_reconcile(args):
+    from datetime import datetime, timedelta
     print(f"Reconciling past {args.lookback_days} days...")
+    runner, sites = _get_runner_setup()
+    end_date = datetime.now()
+    start_date = (end_date - timedelta(days=args.lookback_days)).strftime("%Y-%m-%d")
+    runner.backfill(sites, start_date, end_date.strftime("%Y-%m-%d"), args.max_runtime_minutes, 1000000)
+    print("Reconcile completed.")
 
 def main():
     parser = argparse.ArgumentParser(description="SL Fisheries Weather CLI")

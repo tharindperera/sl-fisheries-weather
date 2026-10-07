@@ -70,29 +70,54 @@ License: CC BY 4.0 for the data.
         with card_path.open("w") as f:
             f.write(card_content)
 
-        print("Uploading initial files...")
-        self.api.upload_file(
-            path_or_fileobj=str(sites_path),
-            path_in_repo="metadata/sites.csv",
-            repo_id=self.repo_id,
-            repo_type="dataset"
-        )
-        self.api.upload_file(
-            path_or_fileobj=str(coverage_path),
-            path_in_repo="metadata/coverage.json",
-            repo_id=self.repo_id,
-            repo_type="dataset"
-        )
-        self.api.upload_file(
-            path_or_fileobj=str(manifest_path),
-            path_in_repo="metadata/manifest.json",
-            repo_id=self.repo_id,
-            repo_type="dataset"
-        )
-        self.api.upload_file(
-            path_or_fileobj=str(card_path),
-            path_in_repo="README.md",
-            repo_id=self.repo_id,
-            repo_type="dataset"
-        )
+        print("Uploading initial files if missing...")
+        existing_files = self.api.list_repo_files(repo_id=self.repo_id, repo_type="dataset")
+        
+        if "metadata/sites.csv" not in existing_files:
+            self.api.upload_file(
+                path_or_fileobj=str(sites_path),
+                path_in_repo="metadata/sites.csv",
+                repo_id=self.repo_id,
+                repo_type="dataset"
+            )
+        if "metadata/coverage.json" not in existing_files:
+            self.api.upload_file(
+                path_or_fileobj=str(coverage_path),
+                path_in_repo="metadata/coverage.json",
+                repo_id=self.repo_id,
+                repo_type="dataset"
+            )
+        if "metadata/manifest.json" not in existing_files:
+            self.api.upload_file(
+                path_or_fileobj=str(manifest_path),
+                path_in_repo="metadata/manifest.json",
+                repo_id=self.repo_id,
+                repo_type="dataset"
+            )
+        if "README.md" not in existing_files:
+            self.api.upload_file(
+                path_or_fileobj=str(card_path),
+                path_in_repo="README.md",
+                repo_id=self.repo_id,
+                repo_type="dataset"
+            )
         print("Initialization complete.")
+
+    def publish_data(self, commit_message: str, operations: list):
+        # operations should be a list of huggingface_hub.CommitOperationAdd
+        try:
+            info = self.api.dataset_info(self.repo_id)
+            parent_commit = info.sha
+        except Exception as e:
+            raise RuntimeError(f"Could not get parent commit for {self.repo_id}: {e}")
+            
+        print(f"Creating commit on {self.repo_id} with parent {parent_commit}...")
+        self.api.create_commit(
+            repo_id=self.repo_id,
+            repo_type="dataset",
+            operations=operations,
+            commit_message=commit_message,
+            parent_commit=parent_commit
+        )
+        print("Data published successfully.")
+

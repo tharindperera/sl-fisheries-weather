@@ -1,0 +1,7 @@
+pyproject.toml
+sl_fisheries_weather.egg-info/PKG-INFO
+sl_fisheries_weather.egg-info/SOURCES.txt
+sl_fisheries_weather.egg-info/dependency_links.txt
+sl_fisheries_weather.egg-info/entry_points.txt
+sl_fisheries_weather.egg-info/requires.txt
+sl_fisheries_weather.egg-info/top_level.txt

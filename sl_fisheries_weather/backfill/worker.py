@@ -20,16 +20,16 @@ class Worker:
         day_factor = max(1, num_days / 14)
         return int(num_locations * num_models * var_factor * day_factor)
 
-    def fetch_batch(self, work_id: str, url: str, params: dict, expected_locs: int, expected_days: int):
+    def fetch_batch(self, work_id: str, url: str, params: dict, expected_locs: int, expected_days: int, expected_start: str, expected_vars: list, expected_units: dict = None):
         # cost
         models_count = len(params.get("models", "").split(","))
         vars_count = len(params.get("daily", "").split(","))
         cost = self._estimate_cost(expected_locs, models_count, vars_count, expected_days)
         
-        self.ledger.reserve(cost)
+        self.client.ledger = self.ledger
         try:
-            data = self.client.fetch(url, params)
-            results = validate_response(data, expected_locs, expected_days)
+            data = self.client.fetch(url, params, cost_per_attempt=cost)
+            results = validate_response(data, expected_locs, expected_days, expected_start, expected_vars, expected_units)
             return results
         except Exception as e:
             # We don't refund if failure was actual network call, but budget is safety budget

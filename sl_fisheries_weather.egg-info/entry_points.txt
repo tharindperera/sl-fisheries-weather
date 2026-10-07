@@ -1,0 +1,2 @@
+[console_scripts]
+sl_fisheries_weather = sl_fisheries_weather.cli:main

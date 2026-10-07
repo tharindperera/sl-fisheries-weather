@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: sl_fisheries_weather
+Version: 0.1.0
+Summary: Sri Lankan fishing-harbour weather and marine dataset
+Author: Tharindu Perera
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: requests
+Requires-Dist: pandas
+Requires-Dist: pyarrow
+Requires-Dist: duckdb
+Requires-Dist: huggingface_hub
+Requires-Dist: python-dotenv
+Requires-Dist: tzdata
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-mock; extra == "dev"
+Requires-Dist: responses; extra == "dev"

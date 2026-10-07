@@ -1,0 +1,12 @@
+requests
+pandas
+pyarrow
+duckdb
+huggingface_hub
+python-dotenv
+tzdata
+
+[dev]
+pytest
+pytest-mock
+responses

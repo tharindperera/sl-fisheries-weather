@@ -10,24 +10,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-### Ubuntu / macOS
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e ".[dev]"
-```
-
 ## 2. Hugging Face Authentication
 Log in via the huggingface_hub CLI to cache your token locally:
 ```bash
-hf auth login
-hf auth whoami
-```
-
-Alternatively, set the token in your environment or via GitHub Secrets.
-Dataset ID defaults to `tharinduperera/sl-fisheries-weather-daily`. Customize this via `.env`:
-```dotenv
-HF_REPO_ID=your_hf_username/sl-fisheries-weather-daily
+python -c "from huggingface_hub import HfApi; print(HfApi().whoami())"
 ```
 
 ## 3. GitHub Actions Configuration
@@ -41,16 +27,12 @@ To enable the automated pipelines, configure the following in your GitHub reposi
 - `AUTOMATION_ENABLED`: Set to `true` to enable daily updates and reconciliation.
 - `BACKFILL_ENABLED`: Set to `true` to enable hourly backfill processing.
 
-## 4. Initializing the Dataset
-Once the pilot is tested, initialize the Hugging Face dataset (ensure your token has appropriate permissions, or create the repo manually first):
-```bash
-python -m sl_fisheries_weather init-hf --create
-```
+*Note: Code and workflows go to GitHub. The Parquet data goes directly to Hugging Face.*
 
-## 5. Execution Order
-1. Offline tests: `pytest tests/`
+## 4. Execution Commands
+1. Offline tests: `python -m pytest tests/`
 2. Validate catalogue: `python -m sl_fisheries_weather verify-sites`
 3. Dry run/pilot: `python -m sl_fisheries_weather pilot --start 2010-01-01 --end 2010-01-14 --include-recent`
 4. Setup HF repository: `python -m sl_fisheries_weather init-hf`
-5. Small backfill test: `python -m sl_fisheries_weather backfill --start 2010-01-01 --max-runtime-minutes 35`
-6. Push to GitHub and enable workflows.
+5. Small backfill test: `python -m sl_fisheries_weather backfill --start 2010-01-01 --max-runtime-minutes 35 --max-estimated-calls 200`
+6. Push code to GitHub and enable repository variable flags.
