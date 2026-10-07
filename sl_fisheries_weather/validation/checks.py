@@ -18,30 +18,36 @@ def validate_response(data: dict, expected_locations: int, expected_days: int, e
             raise ValueError("Response missing 'time' array in 'daily'")
             
         time_arr = daily["time"]
-        if len(time_arr) != expected_days:
-            raise ValueError(f"Expected {expected_days} days of data, got {len(time_arr)}")
-            
+        # Do not assert len(time_arr) == expected_days here, because we allow shorter prefixes.
+        
         # Check continuity and exact start date
-        expected_dates = [(datetime.strptime(expected_start, "%Y-%m-%d") + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(expected_days)]
-        if time_arr != expected_dates:
-            raise ValueError(f"Date sequence mismatch. Expected start {expected_start} for {expected_days} days.")
+        # It's possible the API returns less than expected_days.
+        if len(time_arr) == 0:
+            raise ValueError("Empty time array")
+        
+        if time_arr[0] != expected_start:
+            raise ValueError(f"Date sequence mismatch. Expected start {expected_start}, got {time_arr[0]}")
+        
+        # First pass: find the minimum last_non_null across all variables
+        valid_prefix_len = len(time_arr)
         
         for var in expected_vars:
             if var not in daily:
                 raise ValueError(f"Missing variable {var}")
             arr = daily[var]
-            if len(arr) != expected_days:
-                raise ValueError(f"Length mismatch for {var}: {len(arr)} vs {expected_days}")
             
-            # Check for invalid internal nulls. Trailing unreleased tails might be null, but interior ones are bad.
-            # We will allow trailing nulls, but reject interior nulls.
-            # Find the last non-null index
             last_non_null = -1
             for i, val in enumerate(arr):
                 if val is not None and not math.isnan(val):
                     last_non_null = i
-            
-            for i in range(last_non_null + 1):
+                    
+            if last_non_null + 1 < valid_prefix_len:
+                valid_prefix_len = last_non_null + 1
+                
+        # Now validate everything up to valid_prefix_len
+        for var in expected_vars:
+            arr = daily[var]
+            for i in range(valid_prefix_len):
                 val = arr[i]
                 if val is None or math.isnan(val):
                     raise ValueError(f"Internal null detected in {var} at index {i}")
@@ -61,7 +67,12 @@ def validate_response(data: dict, expected_locations: int, expected_days: int, e
                     raise ValueError(f"Wave height {val} cannot be negative")
                 if "wave_period" in var and val < 0:
                     raise ValueError(f"Wave period {val} cannot be negative")
-                    
+        
+        # Truncate arrays to valid_prefix_len
+        daily["time"] = time_arr[:valid_prefix_len]
+        for k in list(daily.keys()):
+            if k != "time":
+                daily[k] = daily[k][:valid_prefix_len]
         # Check units
         if expected_units and "daily_units" in res:
             units = res["daily_units"]

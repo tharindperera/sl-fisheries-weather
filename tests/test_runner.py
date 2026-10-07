@@ -15,8 +15,8 @@ def test_runner_backfill(tmp_path, mocker):
     mocker.patch("sl_fisheries_weather.manifest.state.DATA_DIR", str(tmp_path))
     mocker.patch("sl_fisheries_weather.budget.ledger.DATA_DIR", str(tmp_path))
     
-    # Mock huggingface Publisher to not actually upload
-    mocker.patch("sl_fisheries_weather.publish_hf.publisher.Publisher.publish_data")
+    # Mock huggingface API to not actually upload or hit network
+    mocker.patch("sl_fisheries_weather.backfill.runner.HfApi")
     
     ledger = Ledger({"minute": 100, "hour": 1000, "day": 5000, "month": 150000})
     worker = Worker(ledger, str(tmp_path))

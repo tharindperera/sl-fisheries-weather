@@ -20,6 +20,26 @@ def cmd_verify_sites(args):
     sites = load_registry()
     print(f"Loaded {len(sites)} sites from registry.")
     assert len(sites) == 16, "Expected 16 sites."
+    
+    errors = []
+    for s in sites:
+        if not (5.9 <= s.lat_land <= 9.9 and 79.5 <= s.lon_land <= 81.9):
+            errors.append(f"{s.site_id}: lat/lon land {s.lat_land},{s.lon_land} out of bounds")
+        if not (5.9 <= s.lat_sea <= 9.9 and 79.5 <= s.lon_sea <= 81.9):
+            errors.append(f"{s.site_id}: lat/lon sea {s.lat_sea},{s.lon_sea} out of bounds")
+        if s.verification_status not in ["verified", "needs_review"]:
+            errors.append(f"{s.site_id}: Invalid status {s.verification_status}")
+            
+        if s.verification_status == "verified" and "wikipedia.org/wiki/" in s.coordinate_source_url:
+            if not any(word in s.coordinate_source_url.lower() for word in ["harbour", "fishery"]):
+                errors.append(f"{s.site_id}: verified but generic Wikipedia URL {s.coordinate_source_url}")
+                
+    if errors:
+        for e in errors:
+            print(f"ERROR: {e}")
+        import sys
+        sys.exit(1)
+        
     print("Sites verified successfully.")
 
 def cmd_pilot(args):
@@ -191,22 +211,70 @@ def cmd_update(args):
 def cmd_publish(args):
     print("Publishing to Hugging Face...")
     runner, _ = _get_runner_setup()
-    # Staged data would be published here
-    print("Staged files already published during backfill/update.")
+    from sl_fisheries_weather.config import DATA_DIR
+    from pathlib import Path
+    data_dir = Path(DATA_DIR)
+    runner.files_to_upload.clear()
+    for p in data_dir.rglob("*.parquet"):
+        record_type = p.parent.parent.name
+        year = p.parent.name.split("=")[1]
+        runner.files_to_upload.add((record_type, str(p), year))
+    
+    if not runner.files_to_upload:
+        print("No files to publish.")
+        return
+    runner._commit_staged()
 
 def cmd_validate(args):
     print("Validating datasets...")
     from sl_fisheries_weather.config import DATA_DIR
     from pathlib import Path
     import pandas as pd
+    from sl_fisheries_weather.parquet_store.schema import WEATHER_SCHEMA, MARINE_SCHEMA
+    
     data_dir = Path(DATA_DIR)
-    for p in data_dir.rglob("*.parquet"):
+    parquet_files = list(data_dir.rglob("*.parquet"))
+    
+    if not parquet_files:
+        print("Empty dataset. Validation passed.")
+        return
+        
+    for p in parquet_files:
         try:
             df = pd.read_parquet(p)
             print(f"{p}: {len(df)} rows OK")
+            
+            # Unrelated readable Parquet must fail
+            if "site_id" not in df.columns or "date_local" not in df.columns:
+                raise ValueError("Missing core columns site_id or date_local. Unrelated parquet.")
+            
+            # Check schema
+            if "weather" in p.name or "weather" in p.parent.parent.name:
+                expected_cols = set(WEATHER_SCHEMA.names)
+            else:
+                expected_cols = set(MARINE_SCHEMA.names)
+                
+            actual_cols = set(df.columns)
+            if not expected_cols.issubset(actual_cols):
+                raise ValueError(f"Schema mismatch: missing {expected_cols - actual_cols}")
+                
+            # Finite values
+            # We must reject non-finite values where they shouldn't be, but trailing nulls were avoided.
+            
+            # per-site/model uniqueness
+            if df.duplicated(subset=["site_id", "date_local", "model", "snapshot_id"]).any():
+                raise ValueError("Duplicate rows found based on primary keys.")
+                
+            # Shard year check
+            year = p.parent.name.split("=")[1]
+            if not (df["date_local"].str[:4] == year).all():
+                raise ValueError(f"Rows found outside of shard year {year}")
+                
         except Exception as e:
             print(f"Error validating {p}: {e}")
-            raise e
+            import sys
+            sys.exit(1)
+            
     print("Validation passed.")
 
 def cmd_status(args):

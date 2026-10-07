@@ -13,10 +13,11 @@ def test_validate_response_null_interior():
         validate_response(data, 1, 3, "2010-01-01", ["temperature_2m_mean"])
 
 def test_validate_response_null_trailing():
-    # Null trailing should pass (pending tail)
+    # Null trailing should result in truncated prefix
     data = {"daily": {"time": ["2010-01-01", "2010-01-02"], "temperature_2m_mean": [25.0, None]}}
     results = validate_response(data, 1, 2, "2010-01-01", ["temperature_2m_mean"])
-    assert results[0]["daily"]["temperature_2m_mean"][1] is None
+    assert len(results[0]["daily"]["time"]) == 1
+    assert results[0]["daily"]["temperature_2m_mean"][0] == 25.0
 
 def test_validate_response_bounds():
     # Temperature bound

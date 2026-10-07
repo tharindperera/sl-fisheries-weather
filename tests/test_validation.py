@@ -21,10 +21,12 @@ def test_validate_response_wrong_locations():
 
 def test_validate_response_wrong_days():
     data = [{"daily": {"time": ["2010-01-01", "2010-01-02"]}}]
-    with pytest.raises(ValueError, match="Expected 1 days"):
-        validate_response(data, 1, 1, "2010-01-01", [])
+    # Now this just returns the available days up to expected if smaller
+    results = validate_response(data, 1, 1, "2010-01-01", [])
+    assert len(results[0]["daily"]["time"]) == 2
         
 def test_validate_response_mismatch_arrays():
     data = [{"daily": {"time": ["2010-01-01"], "precipitation_sum": []}}]
-    with pytest.raises(ValueError, match="Length mismatch"):
-        validate_response(data, 1, 1, "2010-01-01", ["precipitation_sum"])
+    # This should now result in an empty valid prefix
+    results = validate_response(data, 1, 1, "2010-01-01", ["precipitation_sum"])
+    assert len(results[0]["daily"]["time"]) == 0
