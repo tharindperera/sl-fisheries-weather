@@ -1,0 +1,35 @@
+name: Backfill
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '31 * * * *'
+
+concurrency:
+  group: weather-writers
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    if: github.event_name == 'workflow_dispatch' || vars.BACKFILL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "."
+    - name: Run Backfill
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        HF_REPO_ID: ${{ vars.HF_REPO_ID }}
+      run: |
+        python -m sl_fisheries_weather backfill --start 2010-01-01 --max-runtime-minutes 35 --max-estimated-calls 750
