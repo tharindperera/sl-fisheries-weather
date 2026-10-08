@@ -40,12 +40,14 @@ class Runner:
             
         files = self.api.list_repo_files(repo_id=self.repo_id, repo_type="dataset")
         for f in files:
-            if f.endswith(".parquet") or f in ["metadata/manifest.json", "metadata/coverage.json"]:
+            if f.endswith(".parquet") or f in ["metadata/manifest.json", "metadata/coverage.json", "metadata/checkpoint.json"]:
                 try:
                     local_path = self.api.hf_hub_download(repo_id=self.repo_id, repo_type="dataset", filename=f)
                     dest = Path(DATA_DIR) / f
                     if f.startswith("data/"):
                         dest = Path(DATA_DIR) / f.replace("data/", "")
+                    elif f.startswith("metadata/"):
+                        dest = Path(DATA_DIR) / f.replace("metadata/", "")
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy(local_path, dest)
                 except Exception as e:
@@ -276,6 +278,12 @@ class Runner:
                 operations.append(CommitOperationAdd(
                     path_in_repo=f"data/{record_type}/year={year}/{record_type.split('_')[0]}.parquet",
                     path_or_fileobj=file_path
+                ))
+                
+            if self.checkpoint.path.exists():
+                operations.append(CommitOperationAdd(
+                    path_in_repo="metadata/checkpoint.json",
+                    path_or_fileobj=str(self.checkpoint.path)
                 ))
             
             print(f"Creating commit on {self.repo_id} with parent {self.parent_commit}...")
