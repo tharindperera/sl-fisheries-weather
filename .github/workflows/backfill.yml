@@ -32,4 +32,4 @@ jobs:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
         HF_REPO_ID: ${{ vars.HF_REPO_ID }}
       run: |
-        python -m sl_fisheries_weather backfill --start 2010-01-01 --max-runtime-minutes 35 --max-estimated-calls 750
+        python -m sl_fisheries_weather backfill --start 2010-01-01 --max-runtime-minutes 35 --max-estimated-calls 3500

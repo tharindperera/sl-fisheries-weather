@@ -193,7 +193,7 @@ def _get_runner_setup():
     load_dotenv()
     repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
     sites = load_registry()
-    ledger = Ledger({"minute": 100, "hour": 1000, "day": 5000, "month": 150000})
+    ledger = Ledger({"minute": 200, "hour": 4000, "day": 9500, "month": 150000})
     worker = Worker(ledger, DATA_DIR)
     checkpoint = CheckpointManager()
     
