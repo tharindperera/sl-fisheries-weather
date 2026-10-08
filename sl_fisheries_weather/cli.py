@@ -3,7 +3,14 @@ import sys
 from sl_fisheries_weather.catalogue.sites import load_registry
 
 def cmd_doctor(args):
+    import os
+    import sys
+    from zoneinfo import ZoneInfo
+    from dotenv import load_dotenv
     print("Running doctor...")
+    print(f"Python version: {sys.version.split()[0]} ({sys.platform})")
+    assert sys.version_info >= (3, 11), "Python 3.11+ required"
+
     print("Checking dependencies...")
     import pandas
     import requests
@@ -11,8 +18,43 @@ def cmd_doctor(args):
     import duckdb
     import huggingface_hub
     from sl_fisheries_weather import config
-    print("Dependencies OK.")
-    # More doctor checks to be implemented
+    print("Dependencies OK (pandas, requests, pyarrow, duckdb, huggingface_hub).")
+
+    # Timezone check
+    tz = ZoneInfo("Asia/Colombo")
+    print(f"Timezone check OK: {tz}")
+
+    # Sites registry check
+    sites = load_registry()
+    print(f"Site registry check OK: {len(sites)} sites loaded.")
+
+    # Configuration & Auth check
+    load_dotenv()
+    repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
+    hf_token = os.environ.get("HF_TOKEN")
+    print(f"Target Hugging Face repository: {repo_id}")
+    if hf_token:
+        print("HF_TOKEN found in environment (present, hidden).")
+    else:
+        print("Notice: HF_TOKEN not set in environment. Checking local cached HF login...")
+    try:
+        api = huggingface_hub.HfApi()
+        who = api.whoami()
+        print(f"Hugging Face authenticated as: {who.get('name', 'Unknown')}")
+    except Exception as e:
+        print(f"Hugging Face auth note: {e}")
+
+    # Network / Open-Meteo check
+    print("Testing Open-Meteo connectivity...")
+    try:
+        r = requests.get("https://archive-api.open-meteo.com/v1/archive?latitude=6.9&longitude=79.8&start_date=2010-01-01&end_date=2010-01-02&models=era5&daily=temperature_2m_mean&timezone=Asia/Colombo", timeout=15)
+        if r.status_code == 200:
+            print("Open-Meteo connectivity OK (HTTP 200).")
+        else:
+            print(f"Open-Meteo responded with status {r.status_code}")
+    except Exception as e:
+        print(f"Open-Meteo connectivity warning: {e}")
+
     print("Doctor checks passed.")
 
 def cmd_verify_sites(args):
@@ -155,32 +197,6 @@ def cmd_init_hf(args):
     pub = Publisher(repo_id)
     pub.init_hf(create=args.create)
 
-def cmd_backfill(args):
-    import os
-    from dotenv import load_dotenv
-    from datetime import datetime
-    from sl_fisheries_weather.budget.ledger import Ledger
-    from sl_fisheries_weather.backfill.worker import Worker
-    from sl_fisheries_weather.backfill.runner import Runner
-    from sl_fisheries_weather.manifest.state import CheckpointManager
-    from sl_fisheries_weather.config import DATA_DIR
-    
-    print(f"Running backfill from {args.start} with limit {args.max_runtime_minutes} mins, {args.max_estimated_calls} calls...")
-    load_dotenv()
-    repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
-    
-    sites = load_registry()
-    ledger = Ledger({
-        "minute": 100, "hour": 1000, "day": 5000, "month": 150000
-    })
-    worker = Worker(ledger, DATA_DIR)
-    checkpoint = CheckpointManager()
-    
-    runner = Runner(worker, checkpoint, repo_id)
-    end_date = datetime.now().strftime("%Y-%m-%d")
-    runner.backfill(sites, args.start, end_date, args.max_runtime_minutes, args.max_estimated_calls)
-    print("Backfill completed or paused cleanly.")
-
 def _get_runner_setup():
     import os
     from dotenv import load_dotenv
@@ -188,16 +204,24 @@ def _get_runner_setup():
     from sl_fisheries_weather.backfill.worker import Worker
     from sl_fisheries_weather.backfill.runner import Runner
     from sl_fisheries_weather.manifest.state import CheckpointManager
-    from sl_fisheries_weather.config import DATA_DIR
+    from sl_fisheries_weather.config import DATA_DIR, DEFAULT_LEDGER_LIMITS
     
     load_dotenv()
     repo_id = os.environ.get("HF_REPO_ID", "tharinduperera/sl-fisheries-weather-daily")
     sites = load_registry()
-    ledger = Ledger({"minute": 200, "hour": 4000, "day": 9500, "month": 150000})
+    ledger = Ledger(DEFAULT_LEDGER_LIMITS)
     worker = Worker(ledger, DATA_DIR)
     checkpoint = CheckpointManager()
     
     return Runner(worker, checkpoint, repo_id), sites
+
+def cmd_backfill(args):
+    from datetime import datetime
+    print(f"Running backfill from {args.start} with limit {args.max_runtime_minutes} mins, {args.max_estimated_calls} calls...")
+    runner, sites = _get_runner_setup()
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    runner.backfill(sites, args.start, end_date, args.max_runtime_minutes, args.max_estimated_calls)
+    print("Backfill completed or paused cleanly.")
 
 def cmd_update(args):
     from datetime import datetime, timedelta
@@ -205,7 +229,10 @@ def cmd_update(args):
     runner, sites = _get_runner_setup()
     end_date = datetime.now()
     start_date = (end_date - timedelta(days=14)).strftime("%Y-%m-%d")
-    runner.backfill(sites, start_date, end_date.strftime("%Y-%m-%d"), args.max_runtime_minutes, 1000000)
+    print(f"Refreshing historical reanalysis for past 14 days ({start_date} to {end_date.strftime('%Y-%m-%d')})...")
+    runner.backfill(sites, start_date, end_date.strftime("%Y-%m-%d"), args.max_runtime_minutes, 1000)
+    print("Fetching recent and forecast products from ECMWF...")
+    runner.update_recent(sites, args.max_runtime_minutes, 1000)
     print("Update completed.")
 
 def cmd_publish(args):
@@ -257,9 +284,6 @@ def cmd_validate(args):
             actual_cols = set(df.columns)
             if not expected_cols.issubset(actual_cols):
                 raise ValueError(f"Schema mismatch: missing {expected_cols - actual_cols}")
-                
-            # Finite values
-            # We must reject non-finite values where they shouldn't be, but trailing nulls were avoided.
             
             # per-site/model uniqueness
             if df.duplicated(subset=["site_id", "date_local", "model", "snapshot_id"]).any():
@@ -279,11 +303,34 @@ def cmd_validate(args):
 
 def cmd_status(args):
     print("Checking dataset status...")
-    runner, _ = _get_runner_setup()
-    print(f"Ledger Minute: {runner.worker.ledger._get_sum('minute_calls')}")
-    print(f"Ledger Hour: {runner.worker.ledger._get_sum('hour_calls')}")
-    print(f"Ledger Day: {runner.worker.ledger._get_sum('day_calls')}")
-    print(f"Ledger Month: {runner.worker.ledger._get_sum('month_calls')}")
+    from pathlib import Path
+    from sl_fisheries_weather.config import DATA_DIR
+    runner, sites = _get_runner_setup()
+    
+    print("\n--- Budget Ledger Status ---")
+    print(f"Minute calls: {runner.worker.ledger._get_sum('minute_calls')} / {runner.worker.ledger.limits.get('minute')}")
+    print(f"Hour calls:   {runner.worker.ledger._get_sum('hour_calls')} / {runner.worker.ledger.limits.get('hour')}")
+    print(f"Day calls:    {runner.worker.ledger._get_sum('day_calls')} / {runner.worker.ledger.limits.get('day')}")
+    print(f"Month calls:  {runner.worker.ledger._get_sum('month_calls')} / {runner.worker.ledger.limits.get('month')}")
+
+    print("\n--- Checkpoint Status ---")
+    all_checkpoints = runner.checkpoint.get_all()
+    successes = [k for k, v in all_checkpoints.items() if v.get("status") == "success"]
+    failures = [k for k, v in all_checkpoints.items() if v.get("status") == "failed"]
+    print(f"Total recorded units: {len(all_checkpoints)}")
+    print(f"Completed:            {len(successes)}")
+    print(f"Failed / Pending:     {len(failures)}")
+
+    print("\n--- Local Storage Status ---")
+    data_dir = Path(DATA_DIR)
+    parquet_files = list(data_dir.rglob("*.parquet"))
+    print(f"Parquet files found:  {len(parquet_files)}")
+    by_product = {}
+    for p in parquet_files:
+        product = p.parent.parent.name
+        by_product[product] = by_product.get(product, 0) + 1
+    for prod, count in sorted(by_product.items()):
+        print(f"  {prod}: {count} shards")
 
 def cmd_reconcile(args):
     from datetime import datetime, timedelta

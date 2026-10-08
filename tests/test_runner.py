@@ -116,3 +116,54 @@ def test_runner_backfill(tmp_path, mocker):
     # Check durable state
     assert (tmp_path / "test_checkpoint.json").exists()
     assert checkpoint.is_completed("backfill_2010-01-01_2010-01-02_batch_0") is True
+
+def test_checkpoint_merge(tmp_path, mocker):
+    mocker.patch("sl_fisheries_weather.manifest.state.DATA_DIR", str(tmp_path))
+    cp1 = CheckpointManager(filename="checkpoint.json")
+    cp1.mark_success("unit_1")
+    
+    cp2 = CheckpointManager(filename="checkpoint.json")
+    assert cp2.is_completed("unit_1") is True
+    
+    # cp1 adds unit_2
+    cp1.mark_success("unit_2")
+    
+    # cp2 marks unit_3; it should merge with disk so unit_2 is NOT wiped out!
+    cp2.mark_success("unit_3")
+    
+    # cp3 reads disk
+    cp3 = CheckpointManager(filename="checkpoint.json")
+    assert cp3.is_completed("unit_1") is True
+    assert cp3.is_completed("unit_2") is True
+    assert cp3.is_completed("unit_3") is True
+
+def test_runner_restore_reloads_checkpoint(tmp_path, mocker):
+    import json
+    mocker.patch("sl_fisheries_weather.config.DATA_DIR", str(tmp_path))
+    mocker.patch("sl_fisheries_weather.backfill.runner.DATA_DIR", str(tmp_path))
+    mocker.patch("sl_fisheries_weather.manifest.state.DATA_DIR", str(tmp_path))
+    mocker.patch("sl_fisheries_weather.budget.ledger.DATA_DIR", str(tmp_path))
+    
+    # Pre-create a remote checkpoint file
+    remote_ckpt_file = tmp_path / "remote_ckpt.json"
+    with open(remote_ckpt_file, "w") as f:
+        json.dump({"pre_existing_batch": {"status": "success", "metadata": {}}}, f)
+        
+    mock_hf = mocker.MagicMock()
+    mock_hf.list_repo_files.return_value = ["metadata/checkpoint.json"]
+    mock_hf.hf_hub_download.return_value = str(remote_ckpt_file)
+    mock_hf.dataset_info.return_value.sha = "dummy_sha"
+    mocker.patch("sl_fisheries_weather.backfill.runner.HfApi", return_value=mock_hf)
+    
+    ledger = Ledger({"minute": 100, "hour": 1000, "day": 5000, "month": 150000})
+    worker = Worker(ledger, str(tmp_path))
+    
+    # Initialized checkpoint before restore, currently empty
+    checkpoint = CheckpointManager(filename="checkpoint.json")
+    assert checkpoint.is_completed("pre_existing_batch") is False
+    
+    runner = Runner(worker, checkpoint, "test/repo")
+    runner.restore()
+    
+    # restore must have reloaded in-memory checkpoint!
+    assert checkpoint.is_completed("pre_existing_batch") is True

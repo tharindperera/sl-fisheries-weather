@@ -14,6 +14,7 @@ from sl_fisheries_weather.config import (
     OPENMETEO_FORECAST_URL, OPENMETEO_MARINE_FORECAST_URL
 )
 from sl_fisheries_weather.backfill.worker import Worker
+from sl_fisheries_weather.budget.ledger import BudgetExceededError
 from sl_fisheries_weather.parquet_store.writer import write_parquet
 from sl_fisheries_weather.parquet_store.schema import WEATHER_SCHEMA, MARINE_SCHEMA
 from sl_fisheries_weather.manifest.state import CheckpointManager
@@ -40,7 +41,12 @@ class Runner:
             
         files = self.api.list_repo_files(repo_id=self.repo_id, repo_type="dataset")
         for f in files:
-            if f.endswith(".parquet") or f in ["metadata/manifest.json", "metadata/coverage.json", "metadata/checkpoint.json"]:
+            if f.endswith(".parquet") or f in [
+                "metadata/manifest.json",
+                "metadata/coverage.json",
+                "metadata/checkpoint.json",
+                "metadata/budget_state.json"
+            ]:
                 try:
                     local_path = self.api.hf_hub_download(repo_id=self.repo_id, repo_type="dataset", filename=f)
                     dest = Path(DATA_DIR) / f
@@ -53,6 +59,13 @@ class Runner:
                 except Exception as e:
                     print(f"Failed to restore {f}: {e}")
 
+        # CRITICAL: Reload in-memory state after restoring from HF!
+        if self.checkpoint:
+            self.checkpoint.reload()
+            print(f"Restored checkpoint with {len(self.checkpoint.state)} entries.")
+        if hasattr(self.worker, "ledger") and self.worker.ledger:
+            self.worker.ledger.reload()
+
     def backfill(self, sites: list, start_date_str: str, end_date_str: str, max_runtime_minutes: int, max_calls: int):
         self.restore()
         
@@ -63,21 +76,19 @@ class Runner:
         batches = [sites[i:i+8] for i in range(0, len(sites), 8)]
         calls_made = 0
         
-        for i, batch in enumerate(batches):
-            current_start = start_date
-            while current_start <= end_date:
-                current_end = current_start + timedelta(days=13)
-                if current_end > end_date:
-                    current_end = end_date
-                    
-                s_date = current_start.strftime("%Y-%m-%d")
-                e_date = current_end.strftime("%Y-%m-%d")
-                expected_days = (current_end - current_start).days + 1
+        current_start = start_date
+        while current_start <= end_date:
+            current_end = current_start + timedelta(days=13)
+            if current_end > end_date:
+                current_end = end_date
                 
-                # Assume batch runs together, simplified work id
+            s_date = current_start.strftime("%Y-%m-%d")
+            e_date = current_end.strftime("%Y-%m-%d")
+            expected_days = (current_end - current_start).days + 1
+            
+            for i, batch in enumerate(batches):
                 work_id = f"backfill_{s_date}_{e_date}_batch_{i}"
                 if self.checkpoint.is_completed(work_id):
-                    current_start = current_end + timedelta(days=1)
                     continue
 
                 if (datetime.now() - start_time).total_seconds() / 60 > max_runtime_minutes:
@@ -106,6 +117,10 @@ class Runner:
                     calls_made += cost_atmos
                     df_atmos = self._parse_to_df(res_atmos, batch, "era5", "weather_reanalysis")
                     self._save_parquet(df_atmos, "weather_reanalysis", WEATHER_SCHEMA)
+                except BudgetExceededError as e:
+                    print(f"API budget limit reached: {e}")
+                    self._commit_staged()
+                    return
                 except Exception as e:
                     print(f"Failed atmos {work_id}: {e}")
                     self.checkpoint.mark_failure(work_id, str(e))
@@ -132,14 +147,16 @@ class Runner:
                     calls_made += cost_marine
                     df_marine = self._parse_to_df(res_marine, batch, "era5_ocean", "marine_reanalysis")
                     self._save_parquet(df_marine, "marine_reanalysis", MARINE_SCHEMA)
+                except BudgetExceededError as e:
+                    print(f"API budget limit reached: {e}")
+                    self._commit_staged()
+                    return
                 except Exception as e:
                     print(f"Failed marine {work_id}: {e}")
                     self.checkpoint.mark_failure(work_id, str(e))
                     self._commit_staged()
                     return
 
-                # Check if we got full expected days. If not, it's a pending tail, do not mark completed.
-                # Find min length across results
                 min_days = expected_days
                 for res in res_atmos + res_marine:
                     if "daily" in res and "time" in res["daily"]:
@@ -150,7 +167,8 @@ class Runner:
                 else:
                     self.checkpoint.mark_failure(work_id, "Pending tail")
                 print(f"Completed {work_id} up to {min_days} days")
-                current_start = current_end + timedelta(days=1)
+
+            current_start = current_end + timedelta(days=1)
                 
         self._commit_staged()
 
@@ -194,9 +212,12 @@ class Runner:
                 if not df_recent.empty:
                     self._save_parquet(df_recent, "weather_recent", WEATHER_SCHEMA)
                 if not df_forecast.empty:
-                    # snapshot_id is already the date_local. Wait, forecast snapshot id should be today's date.
                     df_forecast["snapshot_id"] = today_str
                     self._save_parquet(df_forecast, "weather_forecasts", WEATHER_SCHEMA)
+            except BudgetExceededError as e:
+                print(f"API budget limit reached: {e}")
+                self._commit_staged()
+                return
             except Exception as e:
                 self.checkpoint.mark_failure(work_id, str(e))
                 self._commit_staged()
@@ -225,6 +246,10 @@ class Runner:
                 if not df_forecast.empty:
                     df_forecast["snapshot_id"] = today_str
                     self._save_parquet(df_forecast, "marine_forecasts", MARINE_SCHEMA)
+            except BudgetExceededError as e:
+                print(f"API budget limit reached: {e}")
+                self._commit_staged()
+                return
             except Exception as e:
                 self.checkpoint.mark_failure(work_id, str(e))
                 self._commit_staged()
@@ -285,15 +310,30 @@ class Runner:
                     path_in_repo="metadata/checkpoint.json",
                     path_or_fileobj=str(self.checkpoint.path)
                 ))
+
+            budget_path = Path(DATA_DIR) / "budget_state.json"
+            if budget_path.exists():
+                operations.append(CommitOperationAdd(
+                    path_in_repo="metadata/budget_state.json",
+                    path_or_fileobj=str(budget_path)
+                ))
+            
+            print(f"DEBUG: operations length is {len(operations)}")
+            for op in operations:
+                print(f"DEBUG: op path_in_repo={op.path_in_repo}")
             
             print(f"Creating commit on {self.repo_id} with parent {self.parent_commit}...")
-            self.api.create_commit(
+            commit_info = self.api.create_commit(
                 repo_id=self.repo_id,
                 repo_type="dataset",
                 operations=operations,
                 commit_message="Automated data update",
                 parent_commit=self.parent_commit
             )
+            if hasattr(commit_info, "oid"):
+                self.parent_commit = commit_info.oid
+            elif isinstance(commit_info, str):
+                self.parent_commit = commit_info
             print("Data published successfully.")
             self.files_to_upload.clear()
         except Exception as e:

@@ -11,8 +11,14 @@ class CheckpointManager:
     def _load(self):
         if not self.path.exists():
             return {}
-        with self.path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def reload(self):
+        self.state = self._load()
 
     def _save(self):
         with self.path.with_suffix(".tmp").open("w", encoding="utf-8") as f:
@@ -23,11 +29,13 @@ class CheckpointManager:
         return self.state.get(work_id, {}).get("status") == "success"
 
     def mark_success(self, work_id: str, metadata: dict = None):
-        self.state[work_id] = {"status": "success", "metadata": metadata or {}}
+        disk_state = self._load()
+        self.state = {**disk_state, **self.state, work_id: {"status": "success", "metadata": metadata or {}}}
         self._save()
 
     def mark_failure(self, work_id: str, error: str, metadata: dict = None):
-        self.state[work_id] = {"status": "failed", "error": error, "metadata": metadata or {}}
+        disk_state = self._load()
+        self.state = {**disk_state, **self.state, work_id: {"status": "failed", "error": error, "metadata": metadata or {}}}
         self._save()
 
     def get_all(self):

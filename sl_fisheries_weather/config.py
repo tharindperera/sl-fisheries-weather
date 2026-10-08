@@ -14,10 +14,17 @@ OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPENMETEO_MARINE_FORECAST_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Budgets
-MAX_CALLS_PER_MINUTE = 100
-MAX_CALLS_PER_HOUR = 1000
-MAX_CALLS_PER_DAY = 5000
-MAX_CALLS_PER_MONTH = 150000
+MAX_CALLS_PER_MINUTE = int(os.environ.get("MAX_CALLS_PER_MINUTE", 200))
+MAX_CALLS_PER_HOUR = int(os.environ.get("MAX_CALLS_PER_HOUR", 4000))
+MAX_CALLS_PER_DAY = int(os.environ.get("MAX_CALLS_PER_DAY", 9500))
+MAX_CALLS_PER_MONTH = int(os.environ.get("MAX_CALLS_PER_MONTH", 150000))
+
+DEFAULT_LEDGER_LIMITS = {
+    "minute": MAX_CALLS_PER_MINUTE,
+    "hour": MAX_CALLS_PER_HOUR,
+    "day": MAX_CALLS_PER_DAY,
+    "month": MAX_CALLS_PER_MONTH,
+}
 
 # Constants
 START_DATE = "2010-01-01"

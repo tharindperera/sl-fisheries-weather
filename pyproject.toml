@@ -30,3 +30,9 @@ dev = [
 
 [project.scripts]
 sl_fisheries_weather = "sl_fisheries_weather.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sl_fisheries_weather*"]
+
+[tool.setuptools.package-data]
+sl_fisheries_weather = ["catalogue/*.csv"]
