@@ -26,12 +26,8 @@ sl-fisheries-weather/
 │       ├── update_weather.yml  # Daily recent & forecast update workflow
 │       ├── reconcile.yml       # Monthly reconciliation workflow
 │       └── ci.yml              # Offline test suite on push/PR
-├── docs/                       # Project documentation and specifications
-│   ├── SETUP.md                # Quickstart setup instructions
-│   ├── SETUP_GUIDE.md          # Comprehensive account and pipeline runbook
-│   └── PROMPT.txt              # Specification prompt and data contract
-├── scripts/                    # Maintenance and operational utility scripts
-│   └── fix_2026_shards.py      # Utility patch for historical shard repair
+├── docs/                       # Project documentation
+│   └── SETUP.md                # Quickstart setup and execution guide
 ├── sl_fisheries_weather/       # Core Python package
 │   ├── backfill/               # Batch orchestration and worker routines
 │   ├── budget/                 # Open-Meteo rolling rate limiter and ledger
@@ -47,8 +43,7 @@ sl-fisheries-weather/
 ├── .env.example                # Environment variable configuration template
 ├── .gitignore                  # Git ignore rules
 ├── pyproject.toml              # Build and package metadata
-├── IMPLEMENTATION_REPORT.md    # Verification and acceptance audit report
-└── README.md                   # Project overview
+└── README.md                   # Project overview and usage
 ```
 
 ## Available Commands
@@ -70,9 +65,7 @@ Commands:
 - `reconcile`: Revisits older recent reanalysis data for revisions.
 
 ## Documentation
-- [Quickstart Guide](docs/SETUP.md): Step-by-step developer setup and execution commands.
-- [Comprehensive Runbook](docs/SETUP_GUIDE.md): Detailed accounts, token scope, and operational runbook.
-- [Implementation Report](IMPLEMENTATION_REPORT.md): Audit report of tests, fixes, and dataset coverage.
+- [Setup & Run Guide](docs/SETUP.md): Step-by-step developer setup, authentication, and execution commands.
 
 ## License
 - **Code**: MIT License
